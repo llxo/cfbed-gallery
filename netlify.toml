@@ -1,0 +1,16 @@
+[build]
+  publish = "dist"
+  command = "pnpm build"
+
+[[edge_functions]]
+  path = "/api/*"
+  function = "proxy"
+
+[[edge_functions]]
+  path = "/file/*"
+  function = "proxy"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
