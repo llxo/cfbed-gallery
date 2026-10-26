@@ -129,23 +129,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="relative z-10 mt-3.5 space-y-2.5 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5 text-xs">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-zinc-400">
-              <Cpu className="size-3.5" />
-              <span>代理服务</span>
+              <Globe className="size-3.5" />
+              <span>图床地址</span>
             </span>
-            <span className="font-mono text-zinc-200 text-xs">Edge BFF</span>
+            <span
+              className="font-mono text-zinc-200 text-xs truncate max-w-[170px]"
+              title={status?.apiBase || '未配置'}
+            >
+              {status?.apiBase || '未配置'}
+            </span>
           </div>
 
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-zinc-400">
-              <Globe className="size-3.5" />
-              <span>上游地址</span>
+              <Cpu className="size-3.5" />
+              <span>图片链路</span>
             </span>
-            <span
-              className="font-mono text-zinc-200 text-xs truncate max-w-[170px]"
-              title={status?.apiBase || '同源代理'}
-            >
-              {status?.apiBase || '同源代理'}
-            </span>
+            <span className="font-mono text-emerald-400 text-xs">原生直连（零中转）</span>
           </div>
 
           <div className="flex items-center justify-between">
@@ -153,15 +153,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <Key className="size-3.5" />
               <span>API Token</span>
             </span>
-            <span className="font-mono text-emerald-400 text-xs">已配置</span>
+            <span className="font-mono text-emerald-400 text-xs">服务端托管</span>
           </div>
 
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5 text-zinc-400">
               <Shield className="size-3.5" />
-              <span>会话认证</span>
+              <span>安全鉴权</span>
             </span>
-            <span className="font-mono text-emerald-400 text-xs">Cookie</span>
+            <span className="font-mono text-emerald-400 text-xs">HttpOnly Cookie</span>
           </div>
         </div>
 

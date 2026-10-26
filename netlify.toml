@@ -6,10 +6,6 @@
   path = "/api/*"
   function = "proxy"
 
-[[edge_functions]]
-  path = "/file/*"
-  function = "proxy"
-
 [[redirects]]
   from = "/*"
   to = "/index.html"

@@ -3,28 +3,25 @@ import { getStoredCdnUrl } from '@/lib/storage';
 
 export class ApiClient {
   private customCdnUrl: string = '';
+  private serverApiBase: string = '';
 
   constructor() {
     this.customCdnUrl = getStoredCdnUrl();
+  }
+
+  public setServerApiBase(url: string) {
+    this.serverApiBase = url.trim().replace(/\/+$/, '');
   }
 
   public setCustomCdnUrl(url: string) {
     this.customCdnUrl = url.trim().replace(/\/+$/, '');
   }
 
-  public getCdnUrl(): string {
+  public getUpstreamBaseUrl(): string {
     if (this.customCdnUrl) return this.customCdnUrl;
+    if (this.serverApiBase) return this.serverApiBase;
     const envCdn = (import.meta.env.VITE_API_BASE || '').trim().replace(/\/+$/, '');
     return envCdn;
-  }
-
-  // 兼容别名
-  public setCustomBaseUrl(url: string) {
-    this.setCustomCdnUrl(url);
-  }
-
-  public getBaseUrl(): string {
-    return this.getCdnUrl();
   }
 
   /**
@@ -84,16 +81,21 @@ export class ApiClient {
    * 兼顾管理端 (name) 与原生公开接口 (id) 字段定义
    */
   public transformRecord(raw: BackendFileRecord): ImageItem {
-    const meta = raw.metadata || {};
-    const baseUrl = this.getBaseUrl();
+    const meta = (raw.metadata || {}) as any;
+    const baseUrl = this.getUpstreamBaseUrl();
     const id = raw.name || raw.id || '';
 
-    // 若配置了外部直连 CDN BaseUrl 则直连，否则回退同源边缘代理 /file/*
-    const directUrl = id
-      ? baseUrl
-        ? `${baseUrl}/file/${encodeURIComponent(id)}`
-        : `/file/${encodeURIComponent(id)}`
-      : '';
+    // 若后端数据自带直接访问地址（例如 S3CdnFileUrl, HfFileUrl, WebDAVPublicUrl 等）直接使用
+    let directUrl = meta.S3CdnFileUrl || meta.HfFileUrl || meta.WebDAVPublicUrl || (raw as any).url || '';
+
+    if (!directUrl && id) {
+      // 纯粹直连图床：绝不走前端同源代理，逐段安全编码保持斜杠层级
+      const safeId = id.includes('/')
+        ? id.split('/').map(encodeURIComponent).join('/')
+        : encodeURIComponent(id);
+
+      directUrl = baseUrl ? `${baseUrl}/file/${safeId}` : `${safeId}`;
+    }
 
     return {
       id,

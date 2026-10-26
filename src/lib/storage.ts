@@ -1,7 +1,6 @@
 import { ServerStatus } from '@/types';
 
 const STORAGE_KEY_CDN = 'cfbed_custom_cdn_url';
-const STORAGE_KEY_LEGACY_BASE = 'cfbed_custom_base_url';
 
 /**
  * 检查当前服务端会话状态（HttpOnly Cookie 校验）
@@ -105,7 +104,7 @@ export async function getServerStatus(): Promise<ServerStatus> {
  */
 export function getStoredCdnUrl(): string {
   if (typeof window === 'undefined') return '';
-  return localStorage.getItem(STORAGE_KEY_CDN) || localStorage.getItem(STORAGE_KEY_LEGACY_BASE) || '';
+  return localStorage.getItem(STORAGE_KEY_CDN) || '';
 }
 
 /**
@@ -116,10 +115,8 @@ export function saveStoredCdnUrl(url: string): void {
   const normalized = url.trim().replace(/\/+$/, '');
   if (normalized) {
     localStorage.setItem(STORAGE_KEY_CDN, normalized);
-    localStorage.removeItem(STORAGE_KEY_LEGACY_BASE);
   } else {
     localStorage.removeItem(STORAGE_KEY_CDN);
-    localStorage.removeItem(STORAGE_KEY_LEGACY_BASE);
   }
 }
 
@@ -129,13 +126,7 @@ export function saveStoredCdnUrl(url: string): void {
 export function resetStoredCdnUrl(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(STORAGE_KEY_CDN);
-  localStorage.removeItem(STORAGE_KEY_LEGACY_BASE);
 }
-
-// 保持对原有函数命名的别名兼容
-export const getStoredBaseUrl = getStoredCdnUrl;
-export const saveStoredBaseUrl = saveStoredCdnUrl;
-export const resetStoredBaseUrl = resetStoredCdnUrl;
 
 /**
  * 生成游客专属公开访问直链

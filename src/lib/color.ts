@@ -13,14 +13,10 @@ export interface BackdropResult {
 const backdropCache = new Map<string, BackdropResult>();
 
 /**
- * 规范化 URL 键名（去除 host 前缀差异）
+ * 提取图片流光背景缓存键
  */
 function getCacheKey(url: string): string {
-  try {
-    return new URL(url, window.location.origin).pathname;
-  } catch {
-    return url;
-  }
+  return url;
 }
 
 /**

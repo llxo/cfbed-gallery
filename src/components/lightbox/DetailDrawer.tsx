@@ -56,14 +56,9 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
   };
   const aspectRatioStr = computeAspectRatio();
 
-  // 保证生成的外链永远是带当前站点/图床域名的完整绝对地址，贴到外部任何平台绝不裂图
-  const fullUrl = item.url.startsWith('http')
-    ? item.url
-    : typeof window !== 'undefined'
-      ? `${window.location.origin}${item.url.startsWith('/') ? '' : '/'}${item.url}`
-      : item.url;
+  const fullUrl = item.url;
 
-  // 外链格式
+  // 外链格式（基于图床真实原生直链生成）
   const markdownLink = `![${item.fileName}](${fullUrl})`;
   const htmlLink = `<img src="${fullUrl}" alt="${item.fileName}" />`;
   const bbcodeLink = `[img]${fullUrl}[/img]`;
@@ -391,7 +386,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => handleCopy(item.url, 'url-quick')}
+                  onClick={() => handleCopy(fullUrl, 'url-quick')}
                   className="flex items-center justify-center gap-1.5 rounded-lg bg-white/10 p-2.5 text-xs text-white hover:bg-white/20 border border-white/10 transition-all shadow-xs"
                 >
                   {copiedKey === 'url-quick' ? (
@@ -403,7 +398,7 @@ export const DetailDrawer: React.FC<DetailDrawerProps> = ({
                 </button>
 
                 <a
-                  href={item.url}
+                  href={fullUrl}
                   download={item.fileName}
                   target="_blank"
                   rel="noopener noreferrer"

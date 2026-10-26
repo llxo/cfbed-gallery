@@ -19,9 +19,7 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
             const url = req.url || '';
-            const isProxyTarget =
-              url.startsWith('/api/') ||
-              url.startsWith('/file/');
+            const isProxyTarget = url.startsWith('/api/');
 
             if (!isProxyTarget) {
               return next();

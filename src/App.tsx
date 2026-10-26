@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '@/api/client';
-import { checkAuthSession } from '@/lib/storage';
+import { getServerStatus } from '@/lib/storage';
 import { DirectoryNode, GalleryMode, ImageItem, NO_FOLDER_DIR } from '@/types';
 import { Header } from '@/components/layout/Header';
 import { MasonryGrid } from '@/components/gallery/MasonryGrid';
@@ -75,12 +75,15 @@ export default function App() {
 
   const PAGE_SIZE = 50;
 
-  // 初始化：向服务端发起安全会话探测
+  // 初始化：向服务端发起安全会话探测并同步图床真实基地址
   useEffect(() => {
     let mounted = true;
-    checkAuthSession().then((authenticated) => {
+    getServerStatus().then((status) => {
       if (!mounted) return;
-      setIsUnlocked(authenticated);
+      if (status.apiBase) {
+        apiClient.setServerApiBase(status.apiBase);
+      }
+      setIsUnlocked(status.authenticated);
       setIsCheckingAuth(false);
     });
     return () => {
