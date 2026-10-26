@@ -1,4 +1,4 @@
-import { handleRequest } from '../../server/core';
+import { handleRequest } from '../../server/core.ts';
 
 export default async (request: Request): Promise<Response> => {
   const env =
