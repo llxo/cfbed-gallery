@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiClient } from '@/api/client';
 import { checkAuthSession } from '@/lib/storage';
-import { GalleryMode, ImageItem } from '@/types';
+import { DirectoryNode, GalleryMode, ImageItem, NO_FOLDER_DIR } from '@/types';
 import { Header } from '@/components/layout/Header';
-import { DirectoryNav } from '@/components/layout/DirectoryNav';
 import { MasonryGrid } from '@/components/gallery/MasonryGrid';
 import { LightboxModal } from '@/components/lightbox/LightboxModal';
 import { SettingsModal } from '@/components/ui/SettingsModal';
 import { LockScreen } from '@/components/ui/LockScreen';
 import { AlertCircle, Settings as SettingsIcon, ShieldAlert } from 'lucide-react';
+
+import { BackdropResult } from '@/lib/color';
 
 // 辅助探测当前 URL 是否处于专属游客路径或参数
 function detectIsVisitorRoute(): boolean {
@@ -67,6 +68,9 @@ export default function App() {
 
   // 弹窗与查看器
   const [activePhotoIndex, setActivePhotoIndex] = useState<number | null>(null);
+  const [transitionOriginRect, setTransitionOriginRect] = useState<DOMRect | null>(null);
+  const [transitionMetrics, setTransitionMetrics] = useState<{ naturalWidth: number; naturalHeight: number } | null>(null);
+  const [initialBackdrop, setInitialBackdrop] = useState<BackdropResult | null>(null);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
 
   const PAGE_SIZE = 50;
@@ -95,24 +99,52 @@ export default function App() {
       }
 
       try {
+        const isNoFolder = targetDir === NO_FOLDER_DIR;
+        const queryDir = isNoFolder ? '' : targetDir;
+        const queryRecursive = isNoFolder ? false : recursive;
+
         const res = await apiClient.fetchImages({
           start: offset,
           count: PAGE_SIZE,
           filters: {
-            dir: targetDir,
+            dir: queryDir,
             search: search.trim(),
-            recursive,
+            recursive: queryRecursive,
           },
           mode,
         });
 
-        if (isInitial) {
-          setItems(res.items);
-        } else {
-          setItems((prev) => [...prev, ...res.items]);
+        let fetchedItems = res.items;
+        if (isNoFolder) {
+          // 额外保底：仅保留根目录下直属未归类（无文件夹）的图片
+          fetchedItems = fetchedItems.filter(
+            (item) => !item.directory || item.directory === '' || item.directory === '/'
+          );
         }
 
-        setDirectories(res.directories || []);
+        if (isInitial) {
+          setItems(fetchedItems);
+        } else {
+          setItems((prev) => [...prev, ...fetchedItems]);
+        }
+
+        // 维护增量全集目录列表，确保进入具体文件夹后顶部下拉框中的其他文件夹绝不丢失
+        setDirectories((prev) => {
+          const set = new Set(prev);
+          (res.directories || []).forEach((d) => set.add(d.endsWith('/') ? d : `${d}/`));
+          if (res.allowedDirs) {
+            res.allowedDirs.forEach((d) => {
+              if (d !== '*' && d !== '') {
+                set.add(d.endsWith('/') ? d : `${d}/`);
+              }
+            });
+          }
+          if (targetDir && targetDir !== NO_FOLDER_DIR) {
+            set.add(targetDir.endsWith('/') ? targetDir : `${targetDir}/`);
+          }
+          return Array.from(set).sort();
+        });
+
         setTotalCount(res.totalCount);
         setHasMore(res.hasMore);
 
@@ -161,6 +193,35 @@ export default function App() {
     },
     [currentDir, search, recursive, mode]
   );
+
+  // 管理员解锁后预取目录树
+  useEffect(() => {
+    if (isUnlocked && mode === 'admin') {
+      apiClient
+        .fetchDirectoryTree()
+        .then((tree) => {
+          if (Array.isArray(tree) && tree.length > 0) {
+            const extractPaths = (nodes: DirectoryNode[]): string[] => {
+              let paths: string[] = [];
+              for (const node of nodes) {
+                if (node.path) paths.push(node.path.endsWith('/') ? node.path : `${node.path}/`);
+                if (node.children && node.children.length > 0) {
+                  paths = paths.concat(extractPaths(node.children));
+                }
+              }
+              return paths;
+            };
+            const treePaths = extractPaths(tree);
+            if (treePaths.length > 0) {
+              setDirectories((prev) => Array.from(new Set([...prev, ...treePaths])).sort());
+            }
+          }
+        })
+        .catch(() => {
+          // 降级使用相册列表返回的 directories 增量维护
+        });
+    }
+  }, [isUnlocked, mode]);
 
   // 当目录、搜索、递归或权限模式变动时重新拉取
   useEffect(() => {
@@ -268,20 +329,6 @@ export default function App() {
           </div>
         )}
 
-        {/* 子目录面包屑微标（进入子文件夹时悬浮展示） */}
-        {currentDir && (
-          <div className="pt-10">
-            <DirectoryNav
-              currentDir={currentDir}
-              directories={directories}
-              totalCount={totalCount}
-              recursive={recursive}
-              onSelectDir={setCurrentDir}
-              onToggleRecursive={setRecursive}
-            />
-          </div>
-        )}
-
         {/* 紧密 4px 瀑布流画卷 */}
         <MasonryGrid
           items={items}
@@ -289,19 +336,30 @@ export default function App() {
           loadingMore={loadingMore}
           hasMore={hasMore}
           onLoadMore={handleLoadMore}
-          onPreview={(item) => {
+          onPreview={(item, sourceRect, metrics, backdrop) => {
             const index = items.findIndex((i) => i.id === item.id);
             setActivePhotoIndex(index !== -1 ? index : 0);
+            setTransitionOriginRect(sourceRect || null);
+            setTransitionMetrics(metrics || null);
+            setInitialBackdrop(backdrop || null);
           }}
         />
       </main>
 
-      {/* 沉浸式大图全屏查看器 */}
+      {/* 沉浸式大图全屏查看器（支持 Shared Element 飞入与缩回动效） */}
       <LightboxModal
         items={items}
         currentIndex={activePhotoIndex ?? 0}
         isOpen={activePhotoIndex !== null}
-        onClose={() => setActivePhotoIndex(null)}
+        originRect={transitionOriginRect}
+        originMetrics={transitionMetrics}
+        initialBackdrop={initialBackdrop}
+        onClose={() => {
+          setActivePhotoIndex(null);
+          setTransitionOriginRect(null);
+          setTransitionMetrics(null);
+          setInitialBackdrop(null);
+        }}
         onIndexChange={(newIndex) => setActivePhotoIndex(newIndex)}
       />
 

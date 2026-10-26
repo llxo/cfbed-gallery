@@ -1,14 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ImageItem } from '@/types';
 import { formatFileSize, formatTimestamp, copyToClipboard } from '@/lib/utils';
+import { extractBackdropFromImageElement, BackdropResult } from '@/lib/color';
 import { Copy, Check, ExternalLink, Tag } from 'lucide-react';
 
 interface PhotoCardProps {
   item: ImageItem;
-  onPreview?: (item: ImageItem) => void;
+  onPreview?: (
+    item: ImageItem,
+    sourceRect?: DOMRect,
+    metrics?: { naturalWidth: number; naturalHeight: number },
+    initialBackdrop?: BackdropResult | null
+  ) => void;
 }
 
 export const PhotoCard: React.FC<PhotoCardProps> = ({ item, onPreview }) => {
+  const cardRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(false);
@@ -32,7 +39,16 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({ item, onPreview }) => {
 
   return (
     <div
-      onClick={() => onPreview?.(item)}
+      ref={cardRef}
+      data-photo-id={item.id}
+      onClick={() => {
+        const imgEl = cardRef.current?.querySelector('img');
+        const rect = (imgEl || cardRef.current)?.getBoundingClientRect();
+        const naturalWidth = imgEl?.naturalWidth || item.width || 0;
+        const naturalHeight = imgEl?.naturalHeight || item.height || 0;
+        const backdrop = imgEl ? extractBackdropFromImageElement(imgEl) : null;
+        onPreview?.(item, rect, { naturalWidth, naturalHeight }, backdrop);
+      }}
       className="group relative w-full cursor-pointer overflow-hidden rounded-[2px] bg-[#141416] transition-all duration-300"
     >
       {/* 骨架屏占位 */}
@@ -49,6 +65,7 @@ export const PhotoCard: React.FC<PhotoCardProps> = ({ item, onPreview }) => {
         <img
           src={item.url}
           alt={item.fileName}
+          crossOrigin="anonymous"
           loading="lazy"
           onLoad={() => setLoaded(true)}
           onError={() => {

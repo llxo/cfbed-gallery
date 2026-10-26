@@ -70,3 +70,7 @@ export interface ServerStatus {
 }
 
 export type GalleryMode = 'admin' | 'visitor';
+
+/** 无文件夹标识（根目录下直属未分类图片） */
+export const NO_FOLDER_DIR = '__none__';
+

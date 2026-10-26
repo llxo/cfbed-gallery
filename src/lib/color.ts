@@ -13,12 +13,104 @@ export interface BackdropResult {
 const backdropCache = new Map<string, BackdropResult>();
 
 /**
- * 从图片中提取极低频色彩分布（16x12 微图）与主色调 Accent Color
- * 配合双线性平滑插值，呈现出如梦似幻、无噪点的流光氛围
+ * 规范化 URL 键名（去除 host 前缀差异）
+ */
+function getCacheKey(url: string): string {
+  try {
+    return new URL(url, window.location.origin).pathname;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * 同步从 DOM 中已加载渲染的 <img> 元素直接提取流光背景图与主色调
+ * 0 毫秒极速完成，无需任何二次网络请求，点击瞬间即获全色背景
+ */
+export function extractBackdropFromImageElement(img: HTMLImageElement): BackdropResult | null {
+  try {
+    if (!img.complete || img.naturalWidth === 0) return null;
+
+    const cacheKey = getCacheKey(img.src);
+    if (backdropCache.has(cacheKey)) {
+      return backdropCache.get(cacheKey)!;
+    }
+
+    const canvas = document.createElement('canvas');
+    const w = 32;
+    const h = 32;
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+
+    ctx.drawImage(img, 0, 0, w, h);
+    const backdropUrl = canvas.toDataURL('image/jpeg', 0.5);
+
+    const imgData = ctx.getImageData(0, 0, w, h).data;
+    let r = 0,
+      g = 0,
+      b = 0,
+      count = 0;
+
+    for (let i = 0; i < imgData.length; i += 4) {
+      const alpha = imgData[i + 3];
+      if (alpha > 40) {
+        r += imgData[i];
+        g += imgData[i + 1];
+        b += imgData[i + 2];
+        count++;
+      }
+    }
+
+    if (count === 0) return null;
+
+    let avgR = Math.round(r / count);
+    let avgG = Math.round(g / count);
+    let avgB = Math.round(b / count);
+
+    // 提炼生动主色调，对低对比度进行微调拉伸，避免死灰
+    const max = Math.max(avgR, avgG, avgB);
+    const min = Math.min(avgR, avgG, avgB);
+    const diff = max - min;
+
+    if (diff > 8) {
+      const avg = (avgR + avgG + avgB) / 3;
+      const boost = 1.35;
+      avgR = Math.min(240, Math.max(25, Math.round(avg + (avgR - avg) * boost)));
+      avgG = Math.min(240, Math.max(25, Math.round(avg + (avgG - avg) * boost)));
+      avgB = Math.min(240, Math.max(25, Math.round(avg + (avgB - avg) * boost)));
+    } else {
+      avgR = Math.min(220, Math.max(60, avgR));
+      avgG = Math.min(220, Math.max(60, avgG));
+      avgB = Math.min(220, Math.max(60, avgB));
+    }
+
+    const accentRgb = `${avgR}, ${avgG}, ${avgB}`;
+    const accentHex = `#${avgR.toString(16).padStart(2, '0')}${avgG.toString(16).padStart(2, '0')}${avgB.toString(16).padStart(2, '0')}`;
+
+    const result: BackdropResult = {
+      backdropUrl,
+      accentRgb,
+      accentHex,
+    };
+
+    backdropCache.set(cacheKey, result);
+    return result;
+  } catch (err) {
+    console.warn('[ColorExtract] Synchronous extraction failed, will use fallback:', err);
+    return null;
+  }
+}
+
+/**
+ * 异步通过 URL 提取主色调与流光背景
  */
 export async function extractImageBackdrop(imgUrl: string): Promise<BackdropResult> {
-  if (backdropCache.has(imgUrl)) {
-    return backdropCache.get(imgUrl)!;
+  const cacheKey = getCacheKey(imgUrl);
+  if (backdropCache.has(cacheKey)) {
+    return backdropCache.get(cacheKey)!;
   }
 
   return new Promise((resolve) => {
@@ -34,8 +126,8 @@ export async function extractImageBackdrop(imgUrl: string): Promise<BackdropResu
     img.onload = () => {
       try {
         const canvas = document.createElement('canvas');
-        const w = 16;
-        const h = Math.max(1, Math.round((img.naturalHeight / img.naturalWidth) * w));
+        const w = 32;
+        const h = 32;
         canvas.width = w;
         canvas.height = h;
 
@@ -45,17 +137,17 @@ export async function extractImageBackdrop(imgUrl: string): Promise<BackdropResu
           return;
         }
 
-        // 绘制微缩图，抹除高频杂波，提取宏观色彩分布
         ctx.drawImage(img, 0, 0, w, h);
-        const backdropUrl = canvas.toDataURL('image/jpeg', 0.6);
-
-        // 计算加权均值色彩作为主色调 Accent
+        const backdropUrl = canvas.toDataURL('image/jpeg', 0.5);
         const imgData = ctx.getImageData(0, 0, w, h).data;
-        let r = 0, g = 0, b = 0, count = 0;
+        let r = 0,
+          g = 0,
+          b = 0,
+          count = 0;
 
         for (let i = 0; i < imgData.length; i += 4) {
           const alpha = imgData[i + 3];
-          if (alpha > 30) {
+          if (alpha > 40) {
             r += imgData[i];
             g += imgData[i + 1];
             b += imgData[i + 2];
@@ -63,30 +155,38 @@ export async function extractImageBackdrop(imgUrl: string): Promise<BackdropResu
           }
         }
 
-        let accentRgb = '120, 120, 128';
-        let accentHex = '#787880';
+        if (count === 0) {
+          resolve(fallbackResult);
+          return;
+        }
 
-        if (count > 0) {
-          const avgR = Math.round(r / count);
-          const avgG = Math.round(g / count);
-          const avgB = Math.round(b / count);
+        let avgR = Math.round(r / count);
+        let avgG = Math.round(g / count);
+        let avgB = Math.round(b / count);
 
-          // 适度提亮并限制饱和度，防止过暗或过刺眼
-          const clampedR = Math.min(220, Math.max(50, avgR));
-          const clampedG = Math.min(220, Math.max(50, avgG));
-          const clampedB = Math.min(220, Math.max(50, avgB));
+        const max = Math.max(avgR, avgG, avgB);
+        const min = Math.min(avgR, avgG, avgB);
+        const diff = max - min;
 
-          accentRgb = `${clampedR}, ${clampedG}, ${clampedB}`;
-          accentHex = `#${clampedR.toString(16).padStart(2, '0')}${clampedG.toString(16).padStart(2, '0')}${clampedB.toString(16).padStart(2, '0')}`;
+        if (diff > 8) {
+          const avg = (avgR + avgG + avgB) / 3;
+          const boost = 1.35;
+          avgR = Math.min(240, Math.max(25, Math.round(avg + (avgR - avg) * boost)));
+          avgG = Math.min(240, Math.max(25, Math.round(avg + (avgG - avg) * boost)));
+          avgB = Math.min(240, Math.max(25, Math.round(avg + (avgB - avg) * boost)));
+        } else {
+          avgR = Math.min(220, Math.max(60, avgR));
+          avgG = Math.min(220, Math.max(60, avgB));
+          avgB = Math.min(220, Math.max(60, avgB));
         }
 
         const result: BackdropResult = {
           backdropUrl,
-          accentRgb,
-          accentHex,
+          accentRgb: `${avgR}, ${avgG}, ${avgB}`,
+          accentHex: `#${avgR.toString(16).padStart(2, '0')}${avgG.toString(16).padStart(2, '0')}${avgB.toString(16).padStart(2, '0')}`,
         };
 
-        backdropCache.set(imgUrl, result);
+        backdropCache.set(cacheKey, result);
         resolve(result);
       } catch {
         resolve(fallbackResult);
@@ -100,12 +200,3 @@ export async function extractImageBackdrop(imgUrl: string): Promise<BackdropResu
     img.src = imgUrl;
   });
 }
-
-/**
- * 兼容旧方法
- */
-export async function generateSmoothBackdrop(imgUrl: string): Promise<string | null> {
-  const res = await extractImageBackdrop(imgUrl);
-  return res.backdropUrl;
-}
-

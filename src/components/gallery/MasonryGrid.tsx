@@ -3,13 +3,20 @@ import { ImageItem } from '@/types';
 import { PhotoCard } from './PhotoCard';
 import { Image as ImageIcon, Loader2 } from 'lucide-react';
 
+import { BackdropResult } from '@/lib/color';
+
 interface MasonryGridProps {
   items: ImageItem[];
   loading?: boolean;
   loadingMore?: boolean;
   hasMore?: boolean;
   onLoadMore?: () => void;
-  onPreview?: (item: ImageItem) => void;
+  onPreview?: (
+    item: ImageItem,
+    sourceRect?: DOMRect,
+    metrics?: { naturalWidth: number; naturalHeight: number },
+    initialBackdrop?: BackdropResult | null
+  ) => void;
 }
 
 export const MasonryGrid: React.FC<MasonryGridProps> = ({
